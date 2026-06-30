@@ -1,70 +1,181 @@
 # HardwareDeviceConfigManager
 
-A small Avalonia desktop CRUD application for hardware configuration interview practice.
+An Avalonia .NET 8 desktop application for managing hardware device configurations — built as interview prep for a **Senior .NET Desktop Developer** role (C#, MVVM, Avalonia, hardware configuration, USB/API/HAL concepts, testing).
 
-## How to run
+---
 
-1. Install the .NET SDK (uses the installed SDK on your machine).
-2. From the repository root:
-   ```bash
-   dotnet restore
-   dotnet run
-   ```
+## How to Run
 
-## Project structure
+Requires [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
 
-- `/Models/DeviceModel.cs` - Device data model and enums (`ConnectionType`, `DeviceStatus`)
-- `/ViewModels/MainWindowViewModel.cs` - UI state, validation, and commands
-- `/Views/MainWindow.axaml` - Two-pane UI (device list + edit form)
-- `/Services/IDeviceRepository.cs` - Repository abstraction for CRUD data access
-- `/Services/InMemoryDeviceRepository.cs` - In-memory repository with sample device data
-- `/Hardware/IHardwareAdapter.cs` - Hardware Abstraction Layer (HAL) contract
-- `/Hardware/SimulatedHardwareAdapter.cs` - Simulated HAL implementation
-- `/App.axaml.cs` - Dependency injection composition root
+```bash
+# From the repository root:
+dotnet run
+```
 
-## MVVM architecture
+To build without running:
 
-This app follows MVVM:
+```bash
+dotnet build
+```
 
-- **View** (`MainWindow.axaml`) contains Avalonia controls and bindings.
-- **ViewModel** (`MainWindowViewModel`) owns UI state, validation, and commands.
-- **Model** (`DeviceModel`) contains the data representation.
+---
 
-The View binds to command properties:
+## Project Structure
 
-- `AddDeviceCommand`
-- `UpdateDeviceCommand`
-- `DeleteDeviceCommand`
-- `ClearFormCommand`
-- `SimulateConnectCommand`
-- `SimulateDisconnectCommand`
+```
+HardwareDeviceConfigManager.csproj   ← Project file (Avalonia + CommunityToolkit.Mvvm)
+Program.cs                           ← Entry point, AppBuilder configuration
+App.axaml / App.axaml.cs            ← Application root, DI composition root
+Models/
+  DeviceModel.cs                     ← POCO data model (Id, Name, Type, Status, etc.)
+ViewModels/
+  MainWindowViewModel.cs             ← All UI state, commands, and business logic (MVVM)
+Views/
+  MainWindow.axaml                   ← Two-panel UI: device list + edit form
+  MainWindow.axaml.cs                ← Code-behind (nearly empty — MVVM keeps logic in ViewModel)
+Services/
+  IDeviceRepository.cs               ← Repository interface (Get/Add/Update/Delete)
+  InMemoryDeviceRepository.cs        ← In-memory implementation seeded with sample data
+Hardware/
+  IHardwareAdapter.cs                ← Hardware Abstraction Layer (HAL) interface
+  SimulatedHardwareAdapter.cs        ← Simulated adapter (mimics USB/API latency with Task.Delay)
+```
 
-## HAL abstraction
+---
 
-`MainWindowViewModel` does not call hardware APIs directly. It depends on `IHardwareAdapter`, which is a simple HAL contract. The current implementation (`SimulatedHardwareAdapter`) simulates connect/disconnect behavior.
+## MVVM Architecture
 
-This can be extended by adding new adapters (for USB SDK, REST API device gateways, etc.) without rewriting UI logic.
+```
+┌─────────────────────────────────────────────────────────┐
+│                        View                             │
+│   MainWindow.axaml — pure XAML, no logic                │
+│   Binds to ViewModel properties and commands            │
+└──────────────────────┬──────────────────────────────────┘
+                       │  DataContext (TwoWay Bindings)
+┌──────────────────────▼──────────────────────────────────┐
+│                    ViewModel                            │
+│   MainWindowViewModel.cs                                │
+│   • ObservableCollection<DeviceModel> Devices           │
+│   • Form field properties (FormDeviceName, etc.)        │
+│   • Commands: AddDevice, UpdateDevice, DeleteDevice,    │
+│               ClearForm, SimulateConnect, SimulateDisconnect │
+│   • Depends on IDeviceRepository + IHardwareAdapter     │
+└───────────┬──────────────────────────┬──────────────────┘
+            │                          │
+┌───────────▼────────┐    ┌────────────▼────────────────┐
+│      Service       │    │        Hardware (HAL)        │
+│  IDeviceRepository │    │     IHardwareAdapter        │
+│  (data storage)    │    │   (connect/disconnect)      │
+└────────────────────┘    └─────────────────────────────┘
+            │                          │
+┌───────────▼────────┐    ┌────────────▼────────────────┐
+│InMemoryDeviceRepo  │    │  SimulatedHardwareAdapter   │
+│(seeded sample data)│    │  (Task.Delay simulation)    │
+└────────────────────┘    └─────────────────────────────┘
+```
 
-## Validation
+**Why MVVM?**
+- The View is declarative XAML — no code in code-behind.
+- The ViewModel holds all state and commands — fully unit-testable without a UI.
+- The Model is a plain C# class — no framework dependencies.
 
-Basic form validation is implemented in the ViewModel:
+---
 
-- `DeviceName` is required
-- `FirmwareVersion` is required
+## Hardware Abstraction Layer (HAL)
 
-## Testing approach
+`IHardwareAdapter` abstracts all hardware communication behind two methods:
 
-This repository currently has no test project scaffold. The app logic is structured so tests can be added easily by mocking:
+```csharp
+Task<DeviceStatus> ConnectAsync(DeviceModel device);
+Task<DeviceStatus> DisconnectAsync(DeviceModel device);
+```
 
-- `IDeviceRepository`
-- `IHardwareAdapter`
+The ViewModel calls these methods without knowing the underlying transport. To swap in real hardware:
 
-Then asserting command behavior in `MainWindowViewModel`.
+| Adapter Class              | Transport                              |
+|---------------------------|----------------------------------------|
+| `SimulatedHardwareAdapter` | `Task.Delay` — no hardware needed     |
+| `UsbHardwareAdapter`       | LibUsbDotNet / HidSharp               |
+| `VisaHardwareAdapter`      | NI-VISA / Keysight VISA (GPIB, LAN)   |
+| `RestApiHardwareAdapter`   | `HttpClient` → device REST API        |
 
-## Future improvements
+To use a real USB adapter, implement `IHardwareAdapter` and change one line in `App.axaml.cs`:
 
-- SQLite persistence for device configs
-- Real USB/API hardware adapter implementations
-- Structured logging and diagnostics
-- GitHub Actions build/test workflow
-- Dedicated unit tests for ViewModel and services
+```csharp
+// Before:
+IHardwareAdapter hardwareAdapter = new SimulatedHardwareAdapter();
+
+// After:
+IHardwareAdapter hardwareAdapter = new UsbHardwareAdapter();
+```
+
+---
+
+## Testing Strategy
+
+The ViewModel is fully testable without a UI or physical hardware:
+
+```csharp
+// Arrange
+var mockRepo    = new Mock<IDeviceRepository>();
+var mockAdapter = new Mock<IHardwareAdapter>();
+mockRepo.Setup(r => r.GetAll()).Returns(new List<DeviceModel>());
+mockAdapter.Setup(a => a.ConnectAsync(It.IsAny<DeviceModel>()))
+           .ReturnsAsync(DeviceStatus.Connected);
+
+var vm = new MainWindowViewModel(mockRepo.Object, mockAdapter.Object);
+
+// Act
+vm.FormDeviceName      = "Test Device";
+vm.FormFirmwareVersion = "1.0.0";
+vm.AddDeviceCommand.Execute(null);
+
+// Assert
+mockRepo.Verify(r => r.Add(It.Is<DeviceModel>(d => d.DeviceName == "Test Device")), Times.Once);
+```
+
+Key test scenarios:
+- `AddDeviceCommand` — validation, calls `IDeviceRepository.Add`
+- `UpdateDeviceCommand` — requires selected device, calls `IDeviceRepository.Update`
+- `DeleteDeviceCommand` — removes device, clears form
+- `SimulateConnectCommand` — sets `IsBusy`, calls `IHardwareAdapter.ConnectAsync`, updates status
+- Validation — empty DeviceName or FirmwareVersion sets `StatusMessage`
+
+---
+
+## Dependency Injection
+
+The composition root is in `App.axaml.cs`. All dependencies are wired manually — no DI container needed at this scale:
+
+```csharp
+IDeviceRepository repository     = new InMemoryDeviceRepository();
+IHardwareAdapter  hardwareAdapter = new SimulatedHardwareAdapter();
+var viewModel = new MainWindowViewModel(repository, hardwareAdapter);
+desktop.MainWindow = new MainWindow { DataContext = viewModel };
+```
+
+For a larger app, replace with `Microsoft.Extensions.DependencyInjection`:
+
+```csharp
+var services = new ServiceCollection();
+services.AddSingleton<IDeviceRepository, InMemoryDeviceRepository>();
+services.AddSingleton<IHardwareAdapter, SimulatedHardwareAdapter>();
+services.AddTransient<MainWindowViewModel>();
+var provider = services.BuildServiceProvider();
+```
+
+---
+
+## Future Improvements
+
+| Area | Improvement |
+|------|-------------|
+| **Data storage** | Replace `InMemoryDeviceRepository` with SQLite via EF Core or Dapper |
+| **Real hardware** | Implement `UsbHardwareAdapter` using LibUsbDotNet or HidSharp |
+| **VISA instruments** | Implement `VisaHardwareAdapter` for GPIB/LAN test equipment |
+| **Unit tests** | Add xUnit project with Moq for ViewModel and repository tests |
+| **CI/CD** | GitHub Actions workflow: `dotnet build` + `dotnet test` on push |
+| **Logging** | Add Microsoft.Extensions.Logging for structured hardware event logs |
+| **Config persistence** | Save/load device list to JSON or SQLite on startup/shutdown |
+| **Status polling** | Background `IHostedService` to periodically poll device connection status |
