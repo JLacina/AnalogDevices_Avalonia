@@ -31,6 +31,7 @@ Models/
   DeviceModel.cs                     ← POCO data model (Id, Name, Type, Status, etc.)
 ViewModels/
   MainWindowViewModel.cs             ← All UI state, commands, and business logic (MVVM)
+  EditingDeviceViewModel.cs          ← Observable editing wrapper for the form panel
 Views/
   MainWindow.axaml                   ← Two-panel UI: device list + edit form
   MainWindow.axaml.cs                ← Code-behind (nearly empty — MVVM keeps logic in ViewModel)
@@ -40,6 +41,9 @@ Services/
 Hardware/
   IHardwareAdapter.cs                ← Hardware Abstraction Layer (HAL) interface
   SimulatedHardwareAdapter.cs        ← Simulated adapter (mimics USB/API latency with Task.Delay)
+Tests/
+  HardwareDeviceConfigManager.Tests.csproj  ← xUnit + Moq test project
+  ViewModels/MainWindowViewModelTests.cs    ← 35 unit tests covering all 6 commands
 ```
 
 ---
@@ -57,7 +61,7 @@ Hardware/
 │                    ViewModel                            │
 │   MainWindowViewModel.cs                                │
 │   • ObservableCollection<DeviceModel> Devices           │
-│   • Form field properties (FormDeviceName, etc.)        │
+│   • EditingDevice (EditingDeviceViewModel wrapper)      │
 │   • Commands: AddDevice, UpdateDevice, DeleteDevice,    │
 │               ClearForm, SimulateConnect, SimulateDisconnect │
 │   • Depends on IDeviceRepository + IHardwareAdapter     │
@@ -79,6 +83,18 @@ Hardware/
 - The View is declarative XAML — no code in code-behind.
 - The ViewModel holds all state and commands — fully unit-testable without a UI.
 - The Model is a plain C# class — no framework dependencies.
+
+---
+
+## EditingDeviceViewModel — Form Editing Pattern
+
+`EditingDeviceViewModel` wraps a `DeviceModel` for editing in the right-panel form.
+
+- **`DeviceModel`** stays a pure POCO — no UI framework dependency, freely serializable.
+- **`EditingDeviceViewModel`** holds observable copies of each field while the user edits.
+- **`CommitTo()`** writes the edited values back to the model + repository atomically.
+- **`Revert()`** resets all fields to the last saved state — free "Cancel" behaviour.
+- **`IsDirty`** compares current values to the original — enables "unsaved changes" warnings.
 
 ---
 
@@ -114,7 +130,7 @@ IHardwareAdapter hardwareAdapter = new UsbHardwareAdapter();
 
 ## Testing Strategy
 
-The ViewModel is fully testable without a UI or physical hardware:
+The ViewModel is fully testable without a UI or physical hardware (35 tests, xUnit + Moq):
 
 ```csharp
 // Arrange
@@ -126,21 +142,18 @@ mockAdapter.Setup(a => a.ConnectAsync(It.IsAny<DeviceModel>()))
 
 var vm = new MainWindowViewModel(mockRepo.Object, mockAdapter.Object);
 
-// Act
-vm.FormDeviceName      = "Test Device";
-vm.FormFirmwareVersion = "1.0.0";
+// Act — use EditingDevice wrapper to set form fields
+vm.SelectedDevice = new DeviceModel { DeviceName = "Test", FirmwareVersion = "1.0" };
 vm.AddDeviceCommand.Execute(null);
 
 // Assert
-mockRepo.Verify(r => r.Add(It.Is<DeviceModel>(d => d.DeviceName == "Test Device")), Times.Once);
+mockRepo.Verify(r => r.Add(It.Is<DeviceModel>(d => d.DeviceName == "Test")), Times.Once);
 ```
 
-Key test scenarios:
-- `AddDeviceCommand` — validation, calls `IDeviceRepository.Add`
-- `UpdateDeviceCommand` — requires selected device, calls `IDeviceRepository.Update`
-- `DeleteDeviceCommand` — removes device, clears form
-- `SimulateConnectCommand` — sets `IsBusy`, calls `IHardwareAdapter.ConnectAsync`, updates status
-- Validation — empty DeviceName or FirmwareVersion sets `StatusMessage`
+Run tests with:
+```bash
+dotnet test Tests/HardwareDeviceConfigManager.Tests.csproj
+```
 
 ---
 
@@ -174,7 +187,7 @@ var provider = services.BuildServiceProvider();
 | **Data storage** | Replace `InMemoryDeviceRepository` with SQLite via EF Core or Dapper |
 | **Real hardware** | Implement `UsbHardwareAdapter` using LibUsbDotNet or HidSharp |
 | **VISA instruments** | Implement `VisaHardwareAdapter` for GPIB/LAN test equipment |
-| **Unit tests** | Add xUnit project with Moq for ViewModel and repository tests |
+| **Unit tests** | Expand test coverage to `EditingDeviceViewModel` (IsDirty, Revert, CommitTo) |
 | **CI/CD** | GitHub Actions workflow: `dotnet build` + `dotnet test` on push |
 | **Logging** | Add Microsoft.Extensions.Logging for structured hardware event logs |
 | **Config persistence** | Save/load device list to JSON or SQLite on startup/shutdown |
