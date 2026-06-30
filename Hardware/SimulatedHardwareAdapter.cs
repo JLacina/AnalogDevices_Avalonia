@@ -9,9 +9,7 @@ public class SimulatedHardwareAdapter : IHardwareAdapter
 {
     public DeviceStatus Connect(DeviceModel device)
     {
-        return device.ConnectionType == ConnectionType.Simulator
-            ? DeviceStatus.Connected
-            : DeviceStatus.Connected;
+        return DeviceStatus.Connected;
     }
 
     public DeviceStatus Disconnect(DeviceModel device)
