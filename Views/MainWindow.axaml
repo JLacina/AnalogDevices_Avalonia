@@ -12,10 +12,10 @@
     <!-- ── Title Bar ── -->
     <Border DockPanel.Dock="Top" Background="#2A2A3E" Padding="16,10">
       <StackPanel Orientation="Horizontal" Spacing="12">
-        <TextBlock Text="⚙" FontSize="22" Foreground="#7C9EFF" VerticalAlignment="Center"/>
+        <TextBlock Text="&#x2699;" FontSize="22" Foreground="#7C9EFF" VerticalAlignment="Center"/>
         <TextBlock Text="Hardware Device Config Manager" FontSize="18" FontWeight="Bold"
                    Foreground="White" VerticalAlignment="Center"/>
-        <TextBlock Text="| Interview Demo — MVVM + HAL" FontSize="12"
+        <TextBlock Text="| Interview Demo &#x2014; MVVM + HAL" FontSize="12"
                    Foreground="#888" VerticalAlignment="Center"/>
       </StackPanel>
     </Border>
@@ -42,7 +42,7 @@
       <Border Grid.Column="0" Background="#2A2A3E" CornerRadius="8" Padding="0">
         <DockPanel>
           <Border DockPanel.Dock="Top" Background="#313150" CornerRadius="8,8,0,0" Padding="12,8">
-            <TextBlock Text="📋  Device List" FontWeight="SemiBold" Foreground="#7C9EFF" FontSize="13"/>
+            <TextBlock Text="&#x1F4CB;  Device List" FontWeight="SemiBold" Foreground="#7C9EFF" FontSize="13"/>
           </Border>
           <DataGrid DockPanel.Dock="Top"
                     ItemsSource="{Binding Devices}"
@@ -76,56 +76,62 @@
         <DockPanel>
           <!-- Form Header -->
           <Border DockPanel.Dock="Top" Background="#313150" CornerRadius="8,8,0,0" Padding="12,8">
-            <TextBlock Text="🖊  Device Details" FontWeight="SemiBold" Foreground="#7C9EFF" FontSize="13"/>
+            <TextBlock Text="&#x1F58A;  Device Details" FontWeight="SemiBold" Foreground="#7C9EFF" FontSize="13"/>
           </Border>
 
           <!-- Button Bar -->
           <Border DockPanel.Dock="Bottom" Background="#1E1E2E" CornerRadius="0,0,8,8" Padding="10,8">
             <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
-              <Button Content="➕ Add"        Command="{Binding AddDeviceCommand}"         Margin="4,2" Padding="10,6" Background="#3A7BD5" Foreground="White" CornerRadius="4"/>
-              <Button Content="✏ Update"      Command="{Binding UpdateDeviceCommand}"      Margin="4,2" Padding="10,6" Background="#2E7D32" Foreground="White" CornerRadius="4"/>
-              <Button Content="🗑 Delete"     Command="{Binding DeleteDeviceCommand}"      Margin="4,2" Padding="10,6" Background="#C62828" Foreground="White" CornerRadius="4"/>
-              <Button Content="✖ Clear"       Command="{Binding ClearFormCommand}"         Margin="4,2" Padding="10,6" Background="#555577" Foreground="White" CornerRadius="4"/>
-              <Button Content="🔌 Connect"    Command="{Binding SimulateConnectCommand}"   Margin="4,2" Padding="10,6" Background="#00695C" Foreground="White" CornerRadius="4"/>
-              <Button Content="⏏ Disconnect" Command="{Binding SimulateDisconnectCommand}" Margin="4,2" Padding="10,6" Background="#E65100" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x2795; Add"        Command="{Binding AddDeviceCommand}"         Margin="4,2" Padding="10,6" Background="#3A7BD5" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x270F; Update"     Command="{Binding UpdateDeviceCommand}"      Margin="4,2" Padding="10,6" Background="#2E7D32" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x1F5D1; Delete"    Command="{Binding DeleteDeviceCommand}"      Margin="4,2" Padding="10,6" Background="#C62828" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x2716; Clear"      Command="{Binding ClearFormCommand}"         Margin="4,2" Padding="10,6" Background="#555577" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x1F50C; Connect"   Command="{Binding SimulateConnectCommand}"   Margin="4,2" Padding="10,6" Background="#00695C" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x23CF; Disconnect" Command="{Binding SimulateDisconnectCommand}" Margin="4,2" Padding="10,6" Background="#E65100" Foreground="White" CornerRadius="4"/>
             </WrapPanel>
           </Border>
 
-          <!-- Form Fields -->
-          <ScrollViewer Padding="16">
+          <!-- Form Fields — bound to EditingDevice wrapper                    -->
+          <!-- IsEnabled auto-disables the entire form when no row is selected -->
+          <ScrollViewer Padding="16"
+                        IsEnabled="{Binding EditingDevice, Converter={x:Static ObjectConverters.IsNotNull}}">
             <StackPanel Spacing="12">
 
               <TextBlock Text="Device Name *" Foreground="#AAAACC" FontSize="11"/>
-              <TextBox Text="{Binding FormDeviceName, Mode=TwoWay}" Watermark="e.g. Oscilloscope A"/>
+              <TextBox Text="{Binding EditingDevice.DeviceName, Mode=TwoWay}"
+                       Watermark="e.g. Oscilloscope A"/>
 
               <TextBlock Text="Device Type" Foreground="#AAAACC" FontSize="11"/>
-              <TextBox Text="{Binding FormDeviceType, Mode=TwoWay}" Watermark="e.g. Oscilloscope, DAQ, Sensor"/>
+              <TextBox Text="{Binding EditingDevice.DeviceType, Mode=TwoWay}"
+                       Watermark="e.g. Oscilloscope, DAQ, Sensor"/>
 
               <TextBlock Text="Firmware Version *" Foreground="#AAAACC" FontSize="11"/>
-              <TextBox Text="{Binding FormFirmwareVersion, Mode=TwoWay}" Watermark="e.g. 2.1.0"/>
+              <TextBox Text="{Binding EditingDevice.FirmwareVersion, Mode=TwoWay}"
+                       Watermark="e.g. 2.1.0"/>
 
               <TextBlock Text="Connection Type" Foreground="#AAAACC" FontSize="11"/>
-              <ComboBox SelectedItem="{Binding FormConnectionType, Mode=TwoWay}"
+              <ComboBox SelectedItem="{Binding EditingDevice.ConnectionType, Mode=TwoWay}"
                         ItemsSource="{Binding ConnectionTypes}"
                         HorizontalAlignment="Stretch"/>
 
               <TextBlock Text="Status" Foreground="#AAAACC" FontSize="11"/>
-              <ComboBox SelectedItem="{Binding FormStatus, Mode=TwoWay}"
+              <ComboBox SelectedItem="{Binding EditingDevice.Status, Mode=TwoWay}"
                         ItemsSource="{Binding StatusValues}"
                         HorizontalAlignment="Stretch"/>
 
               <TextBlock Text="Notes" Foreground="#AAAACC" FontSize="11"/>
-              <TextBox Text="{Binding FormNotes, Mode=TwoWay}"
+              <TextBox Text="{Binding EditingDevice.Notes, Mode=TwoWay}"
                        Watermark="Optional notes..."
                        AcceptsReturn="True"
                        Height="70"
                        TextWrapping="Wrap"/>
 
-              <!-- Status badge for selected device -->
+              <!-- Status badge — reads live from the editing wrapper -->
               <Border Background="#1A1A2E" CornerRadius="6" Padding="10,8" Margin="0,8,0,0">
                 <StackPanel Spacing="4">
                   <TextBlock Text="Selected Device Status" Foreground="#666688" FontSize="10"/>
-                  <TextBlock Text="{Binding FormStatus}" Foreground="#7C9EFF" FontSize="15" FontWeight="Bold"/>
+                  <TextBlock Text="{Binding EditingDevice.Status}" Foreground="#7C9EFF"
+                             FontSize="15" FontWeight="Bold"/>
                 </StackPanel>
               </Border>
 
