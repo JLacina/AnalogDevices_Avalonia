@@ -23,6 +23,7 @@ using HardwareDeviceConfigManager.Models;
 using HardwareDeviceConfigManager.Services;
 using HardwareDeviceConfigManager.ViewModels;
 using Moq;
+using Xunit;
 
 namespace HardwareDeviceConfigManager.Tests.ViewModels;
 
@@ -113,12 +114,12 @@ public class FormLoading_Tests : MainWindowViewModelTestBase
 
         vm.SelectedDevice = device;
 
-        Assert.Equal(device.DeviceName,      vm.FormDeviceName);
-        Assert.Equal(device.DeviceType,      vm.FormDeviceType);
-        Assert.Equal(device.FirmwareVersion, vm.FormFirmwareVersion);
-        Assert.Equal(device.Notes,           vm.FormNotes);
-        Assert.Equal(device.ConnectionType,  vm.FormConnectionType);
-        Assert.Equal(device.Status,          vm.FormStatus);
+        Assert.Equal(device.DeviceName,      vm.EditingDevice!.DeviceName);
+        Assert.Equal(device.DeviceType,      vm.EditingDevice!.DeviceType);
+        Assert.Equal(device.FirmwareVersion, vm.EditingDevice!.FirmwareVersion);
+        Assert.Equal(device.Notes,           vm.EditingDevice!.Notes);
+        Assert.Equal(device.ConnectionType,  vm.EditingDevice!.ConnectionType);
+        Assert.Equal(device.Status,          vm.EditingDevice!.Status);
     }
 
     [Fact]
@@ -132,12 +133,8 @@ public class FormLoading_Tests : MainWindowViewModelTestBase
         // Then clear
         vm.SelectedDevice = null;
 
-        Assert.Equal(string.Empty,               vm.FormDeviceName);
-        Assert.Equal(string.Empty,               vm.FormDeviceType);
-        Assert.Equal(string.Empty,               vm.FormFirmwareVersion);
-        Assert.Equal(string.Empty,               vm.FormNotes);
-        Assert.Equal(ConnectionType.USB,         vm.FormConnectionType);
-        Assert.Equal(DeviceStatus.Disconnected,  vm.FormStatus);
+        // With EditingDevice pattern, clearing the selection nulls the wrapper
+        Assert.Null(vm.EditingDevice);
     }
 }
 
@@ -154,8 +151,7 @@ public class Validation_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.GetAll()).Returns(new List<DeviceModel>());
         var vm = new MainWindowViewModel(RepoMock.Object, HalMock.Object);
 
-        vm.FormDeviceName      = "";
-        vm.FormFirmwareVersion = "1.0.0";
+        // No EditingDevice set — AddDevice falls back to blank DeviceModel (DeviceName = "")
 
         // Act
         vm.AddDeviceCommand.Execute(null);
@@ -171,8 +167,7 @@ public class Validation_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.GetAll()).Returns(new List<DeviceModel>());
         var vm = new MainWindowViewModel(RepoMock.Object, HalMock.Object);
 
-        vm.FormDeviceName      = "   ";
-        vm.FormFirmwareVersion = "1.0.0";
+        vm.EditingDevice = new EditingDeviceViewModel(new DeviceModel { DeviceName = "   ", FirmwareVersion = "1.0.0" });
 
         vm.AddDeviceCommand.Execute(null);
 
@@ -186,8 +181,7 @@ public class Validation_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.GetAll()).Returns(new List<DeviceModel>());
         var vm = new MainWindowViewModel(RepoMock.Object, HalMock.Object);
 
-        vm.FormDeviceName      = "My Device";
-        vm.FormFirmwareVersion = "";
+        vm.EditingDevice = new EditingDeviceViewModel(new DeviceModel { DeviceName = "My Device", FirmwareVersion = "" });
 
         vm.AddDeviceCommand.Execute(null);
 
@@ -199,9 +193,9 @@ public class Validation_Tests : MainWindowViewModelTestBase
     public void UpdateDevice_WithEmptyDeviceName_SetsValidationError_AndDoesNotCallUpdate()
     {
         var vm = BuildVm();
-        vm.SelectedDevice      = SeedDevices[0];
-        vm.FormDeviceName      = "";
-        vm.FormFirmwareVersion = "1.0.0";
+        vm.SelectedDevice = SeedDevices[0];
+        vm.EditingDevice!.DeviceName      = "";
+        vm.EditingDevice!.FirmwareVersion = "1.0.0";
 
         vm.UpdateDeviceCommand.Execute(null);
 
@@ -224,12 +218,15 @@ public class AddDevice_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.Add(It.IsAny<DeviceModel>())).Verifiable();
         var vm = new MainWindowViewModel(RepoMock.Object, HalMock.Object);
 
-        vm.FormDeviceName      = "New Sensor";
-        vm.FormDeviceType      = "Sensor";
-        vm.FormFirmwareVersion = "3.0.1";
-        vm.FormConnectionType  = ConnectionType.USB;
-        vm.FormStatus          = DeviceStatus.Disconnected;
-        vm.FormNotes           = "Test note";
+        vm.EditingDevice = new EditingDeviceViewModel(new DeviceModel
+        {
+            DeviceName      = "New Sensor",
+            DeviceType      = "Sensor",
+            FirmwareVersion = "3.0.1",
+            ConnectionType  = ConnectionType.USB,
+            Status          = DeviceStatus.Disconnected,
+            Notes           = "Test note"
+        });
 
         // Act
         vm.AddDeviceCommand.Execute(null);
@@ -255,8 +252,7 @@ public class AddDevice_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.Add(It.IsAny<DeviceModel>())).Callback<DeviceModel>(_ => { });
 
         var vm = new MainWindowViewModel(RepoMock.Object, HalMock.Object);
-        vm.FormDeviceName      = "Scope";
-        vm.FormFirmwareVersion = "1.0";
+        vm.EditingDevice = new EditingDeviceViewModel(new DeviceModel { DeviceName = "Scope", FirmwareVersion = "1.0" });
 
         vm.AddDeviceCommand.Execute(null);
 
@@ -271,8 +267,7 @@ public class AddDevice_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.Add(It.IsAny<DeviceModel>())).Verifiable();
         var vm = new MainWindowViewModel(RepoMock.Object, HalMock.Object);
 
-        vm.FormDeviceName      = "Probe X";
-        vm.FormFirmwareVersion = "2.0";
+        vm.EditingDevice = new EditingDeviceViewModel(new DeviceModel { DeviceName = "Probe X", FirmwareVersion = "2.0" });
 
         vm.AddDeviceCommand.Execute(null);
 
@@ -305,13 +300,13 @@ public class UpdateDevice_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.Update(It.IsAny<DeviceModel>())).Verifiable();
         var vm = BuildVm();
 
-        vm.SelectedDevice      = SeedDevices[0];
-        vm.FormDeviceName      = "Updated Name";
-        vm.FormDeviceType      = "Updated Type";
-        vm.FormFirmwareVersion = "9.9.9";
-        vm.FormConnectionType  = ConnectionType.Simulator;
-        vm.FormStatus          = DeviceStatus.Error;
-        vm.FormNotes           = "Updated note";
+        vm.SelectedDevice = SeedDevices[0];
+        vm.EditingDevice!.DeviceName      = "Updated Name";
+        vm.EditingDevice!.DeviceType      = "Updated Type";
+        vm.EditingDevice!.FirmwareVersion = "9.9.9";
+        vm.EditingDevice!.ConnectionType  = ConnectionType.Simulator;
+        vm.EditingDevice!.Status          = DeviceStatus.Error;
+        vm.EditingDevice!.Notes           = "Updated note";
 
         vm.UpdateDeviceCommand.Execute(null);
 
@@ -331,9 +326,9 @@ public class UpdateDevice_Tests : MainWindowViewModelTestBase
         RepoMock.Setup(r => r.Update(It.IsAny<DeviceModel>())).Verifiable();
         var vm = BuildVm();
 
-        vm.SelectedDevice      = SeedDevices[0];
-        vm.FormDeviceName      = "Renamed Device";
-        vm.FormFirmwareVersion = "5.0";
+        vm.SelectedDevice = SeedDevices[0];
+        vm.EditingDevice!.DeviceName      = "Renamed Device";
+        vm.EditingDevice!.FirmwareVersion = "5.0";
 
         vm.UpdateDeviceCommand.Execute(null);
 
@@ -380,13 +375,12 @@ public class DeleteDevice_Tests : MainWindowViewModelTestBase
         var vm = BuildVm();
 
         vm.SelectedDevice = SeedDevices[0];
-        vm.FormDeviceName = "Something";
+        vm.EditingDevice!.DeviceName = "Something";
 
         vm.DeleteDeviceCommand.Execute(null);
 
         Assert.Null(vm.SelectedDevice);
-        Assert.Equal(string.Empty, vm.FormDeviceName);
-        Assert.Equal(string.Empty, vm.FormFirmwareVersion);
+        Assert.Null(vm.EditingDevice);
     }
 
     [Fact]
@@ -425,19 +419,15 @@ public class ClearForm_Tests : MainWindowViewModelTestBase
     public void ClearForm_ResetsAllFormFieldsToDefaults()
     {
         var vm = BuildVm();
-        vm.SelectedDevice      = SeedDevices[0];
-        vm.FormDeviceName      = "Something";
-        vm.FormFirmwareVersion = "9.9";
-        vm.FormNotes           = "Some note";
+        vm.SelectedDevice = SeedDevices[0];
+        vm.EditingDevice!.DeviceName      = "Something";
+        vm.EditingDevice!.FirmwareVersion = "9.9";
+        vm.EditingDevice!.Notes           = "Some note";
 
         vm.ClearFormCommand.Execute(null);
 
-        Assert.Equal(string.Empty,              vm.FormDeviceName);
-        Assert.Equal(string.Empty,              vm.FormDeviceType);
-        Assert.Equal(string.Empty,              vm.FormFirmwareVersion);
-        Assert.Equal(string.Empty,              vm.FormNotes);
-        Assert.Equal(ConnectionType.USB,        vm.FormConnectionType);
-        Assert.Equal(DeviceStatus.Disconnected, vm.FormStatus);
+        // ClearForm nulls SelectedDevice → EditingDevice is automatically nulled
+        Assert.Null(vm.EditingDevice);
     }
 
     [Fact]
@@ -507,7 +497,7 @@ public class SimulateConnect_Tests : MainWindowViewModelTestBase
         vm.SelectedDevice = SeedDevices[0];
         await vm.SimulateConnectCommand.ExecuteAsync(null);
 
-        Assert.Equal(DeviceStatus.Connected, vm.FormStatus);
+        Assert.Equal(DeviceStatus.Connected, vm.EditingDevice!.Status);
     }
 
     [Fact]
@@ -565,7 +555,7 @@ public class SimulateConnect_Tests : MainWindowViewModelTestBase
         vm.SelectedDevice = SeedDevices[0];
         await vm.SimulateConnectCommand.ExecuteAsync(null);
 
-        Assert.Equal(DeviceStatus.Error, vm.FormStatus);
+        Assert.Equal(DeviceStatus.Error, vm.EditingDevice!.Status);
         Assert.False(vm.IsBusy);
     }
 }
@@ -613,7 +603,7 @@ public class SimulateDisconnect_Tests : MainWindowViewModelTestBase
         vm.SelectedDevice = SeedDevices[1];
         await vm.SimulateDisconnectCommand.ExecuteAsync(null);
 
-        Assert.Equal(DeviceStatus.Disconnected, vm.FormStatus);
+        Assert.Equal(DeviceStatus.Disconnected, vm.EditingDevice!.Status);
     }
 
     [Fact]
@@ -668,8 +658,7 @@ public class EnumSources_Tests : MainWindowViewModelTestBase
     [Fact]
     public void ConnectionTypes_ContainsAllThreeValues()
     {
-        var vm = BuildVm();
-        var values = vm.ConnectionTypes.ToList();
+        var values = MainWindowViewModel.ConnectionTypes.ToList();
 
         Assert.Contains(ConnectionType.USB,       values);
         Assert.Contains(ConnectionType.API,       values);
@@ -680,8 +669,7 @@ public class EnumSources_Tests : MainWindowViewModelTestBase
     [Fact]
     public void StatusValues_ContainsAllThreeValues()
     {
-        var vm = BuildVm();
-        var values = vm.StatusValues.ToList();
+        var values = MainWindowViewModel.StatusValues.ToList();
 
         Assert.Contains(DeviceStatus.Connected,    values);
         Assert.Contains(DeviceStatus.Disconnected, values);
