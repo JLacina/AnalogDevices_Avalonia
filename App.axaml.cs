@@ -5,42 +5,26 @@ using HardwareDeviceConfigManager.Hardware;
 using HardwareDeviceConfigManager.Services;
 using HardwareDeviceConfigManager.ViewModels;
 using HardwareDeviceConfigManager.Views;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace HardwareDeviceConfigManager;
 
 public partial class App : Application
 {
-    private readonly ServiceProvider _serviceProvider = ConfigureServices();
-
-    public override void Initialize()
-    {
-        AvaloniaXamlLoader.Load(this);
-    }
+    public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Simple manual DI composition root — no DI container needed for this scale.
+        // In a larger app, use Microsoft.Extensions.DependencyInjection.
+        IDeviceRepository repository     = new InMemoryDeviceRepository();
+        IHardwareAdapter  hardwareAdapter = new SimulatedHardwareAdapter();
+        var viewModel = new MainWindowViewModel(repository, hardwareAdapter);
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
-            {
-                DataContext = _serviceProvider.GetRequiredService<MainWindowViewModel>()
-            };
-
-            desktop.Exit += (_, _) => _serviceProvider.Dispose();
+            desktop.MainWindow = new MainWindow { DataContext = viewModel };
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    private static ServiceProvider ConfigureServices()
-    {
-        var services = new ServiceCollection();
-
-        services.AddSingleton<IDeviceRepository, InMemoryDeviceRepository>();
-        services.AddSingleton<IHardwareAdapter, SimulatedHardwareAdapter>();
-        services.AddTransient<MainWindowViewModel>();
-
-        return services.BuildServiceProvider();
     }
 }

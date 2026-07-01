@@ -1,275 +1,201 @@
+// MainWindowViewModel — updated to use EditingDeviceViewModel (Option B pattern).
+//
+// MVVM EXPLAINED:
+//   Model           = DeviceModel              → pure POCO data, no UI dependency
+//   EditingWrapper  = EditingDeviceViewModel   → observable form state for one device
+//   ViewModel       = This class               → list state, commands, orchestration
+//   View            = MainWindow.axaml         → pure XAML, zero code-behind logic
+//
+// KEY CHANGES vs the original flat Form* approach:
+//   - All Form* properties replaced by a single EditingDevice wrapper
+//   - Right-panel form binds to EditingDevice.DeviceName etc.
+//   - UpdateDevice calls EditingDevice.CommitTo() instead of mutating fields directly
+//   - SimulateConnect/Disconnect keeps EditingDevice.Status in sync with HAL result
+//   - AddDevice uses CommitTo() on a fresh DeviceModel
+//
+// WHY THE VIEWMODEL DOES NOT TALK DIRECTLY TO HARDWARE:
+//   IHardwareAdapter is injected — the ViewModel never knows whether
+//   the adapter is USB, VISA, REST API, or a test double.
+
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using HardwareDeviceConfigManager.Hardware;
 using HardwareDeviceConfigManager.Models;
 using HardwareDeviceConfigManager.Services;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace HardwareDeviceConfigManager.ViewModels;
 
-// MVVM keeps responsibilities separated:
-// - View (XAML) handles rendering and user interaction wiring.
-// - ViewModel holds UI state/commands and application logic.
-// - Model represents hardware device data.
-public partial class MainWindowViewModel : ViewModelBase
+public partial class MainWindowViewModel : ObservableObject
 {
-    private readonly IDeviceRepository _deviceRepository;
-    private readonly IHardwareAdapter _hardwareAdapter;
+    private readonly IDeviceRepository _repository;
+    private readonly IHardwareAdapter  _hardwareAdapter;
 
-    public ObservableCollection<DeviceModel> Devices { get; } = [];
-    public IReadOnlyList<ConnectionType> ConnectionTypes { get; } = Enum.GetValues<ConnectionType>();
-    public IReadOnlyList<DeviceStatus> Statuses { get; } = Enum.GetValues<DeviceStatus>();
+    // ── Device list (DataGrid source) ────────────────────────────────────────
+    public ObservableCollection<DeviceModel> Devices { get; } = new();
 
+    // ── Selected row in the DataGrid ─────────────────────────────────────────
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(UpdateDeviceCommand))]
-    [NotifyCanExecuteChangedFor(nameof(DeleteDeviceCommand))]
-    [NotifyCanExecuteChangedFor(nameof(SimulateConnectCommand))]
-    [NotifyCanExecuteChangedFor(nameof(SimulateDisconnectCommand))]
-    private DeviceModel? selectedDevice;
-
-    [ObservableProperty]
-    private int id;
-
-    [ObservableProperty]
-    private string deviceName = string.Empty;
-
-    [ObservableProperty]
-    private string deviceType = string.Empty;
-
-    [ObservableProperty]
-    private ConnectionType selectedConnectionType = ConnectionType.USB;
-
-    [ObservableProperty]
-    private string firmwareVersion = string.Empty;
-
-    [ObservableProperty]
-    private DeviceStatus selectedStatus = DeviceStatus.Disconnected;
-
-    [ObservableProperty]
-    private string notes = string.Empty;
-
-    [ObservableProperty]
-    private string validationMessage = string.Empty;
-
-    [ObservableProperty]
-    private string selectedDeviceStatus = "No device selected";
-
-    // Parameterless constructor is only for XAML previewer support.
-    public MainWindowViewModel() : this(new InMemoryDeviceRepository(), new SimulatedHardwareAdapter())
-    {
-    }
-
-    // The ViewModel depends on abstractions, not concrete hardware APIs.
-    // This lets us test UI logic easily and swap in a real adapter later.
-    public MainWindowViewModel(IDeviceRepository deviceRepository, IHardwareAdapter hardwareAdapter)
-    {
-        _deviceRepository = deviceRepository;
-        _hardwareAdapter = hardwareAdapter;
-
-        LoadDevices();
-    }
+    private DeviceModel? _selectedDevice;
 
     partial void OnSelectedDeviceChanged(DeviceModel? value)
     {
-        if (value is null)
-        {
-            SelectedDeviceStatus = "No device selected";
-            return;
-        }
-
-        Id = value.Id;
-        DeviceName = value.DeviceName;
-        DeviceType = value.DeviceType;
-        SelectedConnectionType = value.ConnectionType;
-        FirmwareVersion = value.FirmwareVersion;
-        SelectedStatus = value.Status;
-        Notes = value.Notes;
-        SelectedDeviceStatus = value.Status.ToString();
-        ValidationMessage = string.Empty;
+        // When the user clicks a different row, create a fresh editing wrapper.
+        // The old wrapper is simply discarded — its changes are lost unless
+        // CommitTo() was called. This is the intentional "cancel on select" behaviour.
+        EditingDevice = value is null ? null : new EditingDeviceViewModel(value);
     }
+
+    // ── The observable editing wrapper — right-panel form binds to this ──────
+    // Null when no device is selected (form is blank / disabled via IsEnabled).
+    [ObservableProperty]
+    private EditingDeviceViewModel? _editingDevice;
+
+    // ── Status / busy state ───────────────────────────────────────────────────
+    [ObservableProperty] private string _statusMessage = "Ready";
+    [ObservableProperty] private bool   _isBusy        = false;
+
+    // ── ComboBox sources (static enum lists) ─────────────────────────────────
+    public static IEnumerable<ConnectionType> ConnectionTypes { get; } = Enum.GetValues<ConnectionType>();
+    public static IEnumerable<DeviceStatus>   StatusValues    { get; } = Enum.GetValues<DeviceStatus>();
+
+    // ── Constructor ───────────────────────────────────────────────────────────
+    public MainWindowViewModel(IDeviceRepository repository, IHardwareAdapter hardwareAdapter)
+    {
+        _repository      = repository;
+        _hardwareAdapter = hardwareAdapter;
+        LoadDevices();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private void LoadDevices()
+    {
+        Devices.Clear();
+        foreach (var d in _repository.GetAll())
+            Devices.Add(d);
+    }
+
+    private bool ValidateEditing(EditingDeviceViewModel editing)
+    {
+        if (string.IsNullOrWhiteSpace(editing.DeviceName))
+        {
+            StatusMessage = "Validation error: Device Name is required.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(editing.FirmwareVersion))
+        {
+            StatusMessage = "Validation error: Firmware Version is required.";
+            return false;
+        }
+        return true;
+    }
+
+    // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand]
     private void AddDevice()
     {
-        if (!ValidateForm())
-        {
-            return;
-        }
+        // For Add, create a blank wrapper if nothing is selected
+        var editing = EditingDevice ?? new EditingDeviceViewModel(new DeviceModel());
+        if (!ValidateEditing(editing)) return;
 
-        if (Id <= 0)
-        {
-            Id = _deviceRepository.GetNextId();
-        }
+        var device = new DeviceModel();
+        editing.CommitTo(device);
 
-        var device = BuildFromForm();
-        var added = _deviceRepository.Add(device);
-        Devices.Add(added);
-        SelectedDevice = added;
-        ValidationMessage = string.Empty;
+        _repository.Add(device);
+        LoadDevices();
+        SelectedDevice = Devices.LastOrDefault(d => d.Id == device.Id);
+        StatusMessage  = $"Device '{device.DeviceName}' added (Id={device.Id}).";
     }
 
-    [RelayCommand(CanExecute = nameof(CanOperateOnDevice))]
+    [RelayCommand]
     private void UpdateDevice()
     {
-        if (!ValidateForm())
+        if (SelectedDevice is null || EditingDevice is null)
         {
+            StatusMessage = "Select a device to update.";
             return;
         }
+        if (!ValidateEditing(EditingDevice)) return;
 
-        if (Id <= 0)
-        {
-            ValidationMessage = "Select a device to update.";
-            return;
-        }
+        // Commit the observable editing state back to the domain model
+        EditingDevice.CommitTo(SelectedDevice);
+        _repository.Update(SelectedDevice);
 
-        var updated = BuildFromForm();
-        if (!_deviceRepository.Update(updated))
-        {
-            ValidationMessage = "Unable to update device.";
-            return;
-        }
-
-        ReplaceInCollection(updated);
-        SelectedDevice = updated;
-        ValidationMessage = string.Empty;
+        // LoadDevices() is still needed here because DeviceModel is a POCO
+        // (no INotifyPropertyChanged). Combine with the observable DeviceModel
+        // variant to eliminate this and get true live DataGrid updates.
+        var id = SelectedDevice.Id;
+        LoadDevices();
+        SelectedDevice = Devices.FirstOrDefault(d => d.Id == id);
+        StatusMessage  = $"Device '{EditingDevice.DeviceName}' updated.";
     }
 
-    [RelayCommand(CanExecute = nameof(CanOperateOnDevice))]
+    [RelayCommand]
     private void DeleteDevice()
     {
-        if (Id <= 0)
-        {
-            ValidationMessage = "Select a device to delete.";
-            return;
-        }
-
-        if (!_deviceRepository.Delete(Id))
-        {
-            ValidationMessage = "Unable to delete device.";
-            return;
-        }
-
-        var existing = Devices.FirstOrDefault(d => d.Id == Id);
-        if (existing is not null)
-        {
-            Devices.Remove(existing);
-        }
-
-        ClearForm();
+        if (SelectedDevice is null) { StatusMessage = "Select a device to delete."; return; }
+        var name = SelectedDevice.DeviceName;
+        _repository.Delete(SelectedDevice.Id);
+        LoadDevices();
+        SelectedDevice = null;
+        StatusMessage  = $"Device '{name}' deleted.";
     }
 
     [RelayCommand]
     private void ClearForm()
     {
         SelectedDevice = null;
-        Id = 0;
-        DeviceName = string.Empty;
-        DeviceType = string.Empty;
-        SelectedConnectionType = ConnectionType.USB;
-        FirmwareVersion = string.Empty;
-        SelectedStatus = DeviceStatus.Disconnected;
-        Notes = string.Empty;
-        ValidationMessage = string.Empty;
-        SelectedDeviceStatus = "No device selected";
+        // EditingDevice is nulled automatically via OnSelectedDeviceChanged
+        StatusMessage = "Form cleared.";
     }
 
-    [RelayCommand(CanExecute = nameof(CanOperateOnDevice))]
-    private void SimulateConnect()
+    [RelayCommand]
+    private async Task SimulateConnect()
     {
-        ApplyAdapterStatus(isConnect: true);
+        if (SelectedDevice is null) { StatusMessage = "Select a device to connect."; return; }
+        IsBusy        = true;
+        StatusMessage = $"Connecting to '{SelectedDevice.DeviceName}'...";
+
+        // The ViewModel calls the HAL interface — it doesn't know if this is
+        // USB, VISA, REST API, or a test double. That is the HAL contract.
+        var newStatus = await _hardwareAdapter.ConnectAsync(SelectedDevice);
+
+        SelectedDevice.Status = newStatus;
+
+        // Keep the editing wrapper in sync so the status badge updates live
+        if (EditingDevice is not null)
+            EditingDevice.Status = newStatus;
+
+        _repository.Update(SelectedDevice);
+        var id = SelectedDevice.Id;
+        LoadDevices();
+        SelectedDevice = Devices.FirstOrDefault(d => d.Id == id);
+
+        IsBusy        = false;
+        StatusMessage = $"'{SelectedDevice?.DeviceName}' \u2192 {newStatus}";
     }
 
-    [RelayCommand(CanExecute = nameof(CanOperateOnDevice))]
-    private void SimulateDisconnect()
+    [RelayCommand]
+    private async Task SimulateDisconnect()
     {
-        ApplyAdapterStatus(isConnect: false);
-    }
+        if (SelectedDevice is null) { StatusMessage = "Select a device to disconnect."; return; }
+        IsBusy        = true;
+        StatusMessage = $"Disconnecting '{SelectedDevice.DeviceName}'...";
 
-    private bool CanOperateOnDevice() => SelectedDevice is not null;
+        var newStatus = await _hardwareAdapter.DisconnectAsync(SelectedDevice);
 
-    private void ApplyAdapterStatus(bool isConnect)
-    {
-        if (SelectedDevice is null)
-        {
-            ValidationMessage = "Select a device first.";
-            return;
-        }
+        SelectedDevice.Status = newStatus;
 
-        // The ViewModel does not talk to USB/API implementations directly.
-        // Instead it calls the HAL interface, making hardware behavior pluggable.
-        var newStatus = isConnect
-            ? _hardwareAdapter.Connect(SelectedDevice)
-            : _hardwareAdapter.Disconnect(SelectedDevice);
+        if (EditingDevice is not null)
+            EditingDevice.Status = newStatus;
 
-        SelectedStatus = newStatus;
-        var updated = BuildFromForm();
+        _repository.Update(SelectedDevice);
+        var id = SelectedDevice.Id;
+        LoadDevices();
+        SelectedDevice = Devices.FirstOrDefault(d => d.Id == id);
 
-        if (_deviceRepository.Update(updated))
-        {
-            ReplaceInCollection(updated);
-            SelectedDevice = updated;
-            SelectedDeviceStatus = updated.Status.ToString();
-            ValidationMessage = string.Empty;
-        }
-        else
-        {
-            ValidationMessage = "Unable to apply simulated hardware status.";
-        }
-    }
-
-    private bool ValidateForm()
-    {
-        if (string.IsNullOrWhiteSpace(DeviceName))
-        {
-            ValidationMessage = "DeviceName is required.";
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(FirmwareVersion))
-        {
-            ValidationMessage = "FirmwareVersion is required.";
-            return false;
-        }
-
-        return true;
-    }
-
-    private DeviceModel BuildFromForm()
-    {
-        return new DeviceModel
-        {
-            Id = Id,
-            DeviceName = DeviceName.Trim(),
-            DeviceType = DeviceType.Trim(),
-            ConnectionType = SelectedConnectionType,
-            FirmwareVersion = FirmwareVersion.Trim(),
-            Status = SelectedStatus,
-            Notes = Notes.Trim()
-        };
-    }
-
-    private void LoadDevices()
-    {
-        Devices.Clear();
-        foreach (var device in _deviceRepository.GetAll())
-        {
-            Devices.Add(device);
-        }
-    }
-
-    private void ReplaceInCollection(DeviceModel updated)
-    {
-        var index = Devices
-            .Select((device, idx) => new { device, idx })
-            .FirstOrDefault(x => x.device.Id == updated.Id)
-            ?.idx;
-
-        if (index is not null)
-        {
-            Devices[index.Value] = updated;
-        }
+        IsBusy        = false;
+        StatusMessage = $"'{SelectedDevice?.DeviceName}' \u2192 {newStatus}";
     }
 }

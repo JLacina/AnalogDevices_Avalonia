@@ -1,19 +1,28 @@
+// SimulatedHardwareAdapter simulates hardware connect/disconnect operations.
+// Uses Task.Delay to mimic the async latency of real hardware I/O.
+// In production, replace with UsbHardwareAdapter, VisaHardwareAdapter, etc.
+
 using HardwareDeviceConfigManager.Models;
 
 namespace HardwareDeviceConfigManager.Hardware;
 
-// This simulated adapter stands in for real hardware communication.
-// In production this same interface could be implemented with USB drivers,
-// REST API calls, SDK libraries, retry logic, and diagnostics.
 public class SimulatedHardwareAdapter : IHardwareAdapter
 {
-    public DeviceStatus Connect(DeviceModel device)
+    public async Task<DeviceStatus> ConnectAsync(DeviceModel device)
     {
-        return DeviceStatus.Connected;
+        // Simulate hardware handshake delay
+        await Task.Delay(600);
+
+        // Simulators always connect; USB/API succeed unless already in Error state
+        if (device.ConnectionType == ConnectionType.Simulator || device.Status != DeviceStatus.Error)
+            return DeviceStatus.Connected;
+
+        return DeviceStatus.Error;
     }
 
-    public DeviceStatus Disconnect(DeviceModel device)
+    public async Task<DeviceStatus> DisconnectAsync(DeviceModel device)
     {
+        await Task.Delay(300);
         return DeviceStatus.Disconnected;
     }
 }

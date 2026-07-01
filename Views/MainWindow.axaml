@@ -1,90 +1,144 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:HardwareDeviceConfigManager.ViewModels"
-        xmlns:models="using:HardwareDeviceConfigManager.Models"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d"
-        d:DesignWidth="1100"
-        d:DesignHeight="640"
         x:Class="HardwareDeviceConfigManager.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="HardwareDeviceConfigManager">
+        Title="Hardware Device Config Manager"
+        Width="1100" Height="680"
+        WindowStartupLocation="CenterScreen"
+        Background="#1E1E2E">
 
-    <Design.DataContext>
-        <vm:MainWindowViewModel />
-    </Design.DataContext>
+  <DockPanel LastChildFill="True">
 
-    <Grid ColumnDefinitions="2*,3*" RowDefinitions="Auto,*,Auto" Margin="16" ColumnSpacing="16" RowSpacing="12">
-        <TextBlock Grid.ColumnSpan="2"
-                   Text="Hardware Device Configuration Manager"
-                   FontSize="20"
-                   FontWeight="SemiBold" />
+    <!-- ── Title Bar ── -->
+    <Border DockPanel.Dock="Top" Background="#2A2A3E" Padding="16,10">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="&#x2699;" FontSize="22" Foreground="#7C9EFF" VerticalAlignment="Center"/>
+        <TextBlock Text="Hardware Device Config Manager" FontSize="18" FontWeight="Bold"
+                   Foreground="White" VerticalAlignment="Center"/>
+        <TextBlock Text="| Interview Demo &#x2014; MVVM + HAL" FontSize="12"
+                   Foreground="#888" VerticalAlignment="Center"/>
+      </StackPanel>
+    </Border>
 
-        <Border Grid.Row="1" Grid.Column="0" BorderBrush="LightGray" BorderThickness="1" Padding="10" CornerRadius="8">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="Devices" FontWeight="SemiBold" Margin="0,0,0,8" />
-                <ListBox ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:DeviceModel">
-                            <StackPanel Orientation="Vertical" Margin="0,4">
-                                <TextBlock Text="{Binding DeviceName}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding DeviceType}" FontSize="12" Opacity="0.8" />
-                                <TextBlock Text="{Binding Status}" FontSize="12" Opacity="0.8" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </DockPanel>
-        </Border>
+    <!-- ── Status Bar ── -->
+    <Border DockPanel.Dock="Bottom" Background="#12121E" Padding="12,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Foreground="#AAAACC"
+                   FontSize="12" VerticalAlignment="Center"/>
+        <ProgressBar Grid.Column="1" IsIndeterminate="True" Width="120" Height="6"
+                     IsVisible="{Binding IsBusy}" Foreground="#7C9EFF"/>
+      </Grid>
+    </Border>
 
-        <Border Grid.Row="1" Grid.Column="1" BorderBrush="LightGray" BorderThickness="1" Padding="10" CornerRadius="8">
-            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*" ColumnSpacing="10" RowSpacing="8">
-                <TextBlock Text="Id" />
-                <TextBox Grid.Column="1" Text="{Binding Id, Mode=TwoWay}" IsReadOnly="True" />
+    <!-- ── Main Content ── -->
+    <Grid Margin="12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="1.4*"/>
+        <ColumnDefinition Width="12"/>
+        <ColumnDefinition Width="1*"/>
+      </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="1" Text="Device Name" />
-                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DeviceName, Mode=TwoWay}" PlaceholderText="Required" />
+      <!-- ── Left: Device List ── -->
+      <Border Grid.Column="0" Background="#2A2A3E" CornerRadius="8" Padding="0">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Background="#313150" CornerRadius="8,8,0,0" Padding="12,8">
+            <TextBlock Text="&#x1F4CB;  Device List" FontWeight="SemiBold" Foreground="#7C9EFF" FontSize="13"/>
+          </Border>
+          <DataGrid DockPanel.Dock="Top"
+                    ItemsSource="{Binding Devices}"
+                    SelectedItem="{Binding SelectedDevice, Mode=TwoWay}"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    CanUserSortColumns="True"
+                    GridLinesVisibility="Horizontal"
+                    Background="Transparent"
+                    RowBackground="#2A2A3E"
+                    BorderThickness="0"
+                    Foreground="#DDDDEE"
+                    FontSize="12">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Id"           Binding="{Binding Id}"             Width="45"/>
+              <DataGridTextColumn Header="Device Name"  Binding="{Binding DeviceName}"      Width="160"/>
+              <DataGridTextColumn Header="Type"         Binding="{Binding DeviceType}"      Width="110"/>
+              <DataGridTextColumn Header="Connection"   Binding="{Binding ConnectionType}"  Width="95"/>
+              <DataGridTextColumn Header="Firmware"     Binding="{Binding FirmwareVersion}" Width="80"/>
+              <DataGridTextColumn Header="Status"       Binding="{Binding Status}"          Width="100"/>
+            </DataGrid.Columns>
+          </DataGrid>
+        </DockPanel>
+      </Border>
 
-                <TextBlock Grid.Row="2" Text="Device Type" />
-                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding DeviceType, Mode=TwoWay}" />
+      <!-- ── Splitter ── -->
+      <GridSplitter Grid.Column="1" Width="4" Background="#12121E" VerticalAlignment="Stretch"/>
 
-                <TextBlock Grid.Row="3" Text="Connection" />
-                <ComboBox Grid.Row="3" Grid.Column="1"
-                          ItemsSource="{Binding ConnectionTypes}"
-                          SelectedItem="{Binding SelectedConnectionType, Mode=TwoWay}" />
+      <!-- ── Right: Edit Form ── -->
+      <Border Grid.Column="2" Background="#2A2A3E" CornerRadius="8">
+        <DockPanel>
+          <!-- Form Header -->
+          <Border DockPanel.Dock="Top" Background="#313150" CornerRadius="8,8,0,0" Padding="12,8">
+            <TextBlock Text="&#x1F58A;  Device Details" FontWeight="SemiBold" Foreground="#7C9EFF" FontSize="13"/>
+          </Border>
 
-                <TextBlock Grid.Row="4" Text="Firmware" />
-                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding FirmwareVersion, Mode=TwoWay}" PlaceholderText="Required" />
+          <!-- Button Bar -->
+          <Border DockPanel.Dock="Bottom" Background="#1E1E2E" CornerRadius="0,0,8,8" Padding="10,8">
+            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center">
+              <Button Content="&#x2795; Add"        Command="{Binding AddDeviceCommand}"         Margin="4,2" Padding="10,6" Background="#3A7BD5" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x270F; Update"     Command="{Binding UpdateDeviceCommand}"      Margin="4,2" Padding="10,6" Background="#2E7D32" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x1F5D1; Delete"    Command="{Binding DeleteDeviceCommand}"      Margin="4,2" Padding="10,6" Background="#C62828" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x2716; Clear"      Command="{Binding ClearFormCommand}"         Margin="4,2" Padding="10,6" Background="#555577" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x1F50C; Connect"   Command="{Binding SimulateConnectCommand}"   Margin="4,2" Padding="10,6" Background="#00695C" Foreground="White" CornerRadius="4"/>
+              <Button Content="&#x23CF; Disconnect" Command="{Binding SimulateDisconnectCommand}" Margin="4,2" Padding="10,6" Background="#E65100" Foreground="White" CornerRadius="4"/>
+            </WrapPanel>
+          </Border>
 
-                <TextBlock Grid.Row="5" Text="Status" />
-                <ComboBox Grid.Row="5" Grid.Column="1"
-                          ItemsSource="{Binding Statuses}"
-                          SelectedItem="{Binding SelectedStatus, Mode=TwoWay}" />
+          <!-- Form Fields — bound to EditingDevice wrapper                    -->
+          <!-- IsEnabled auto-disables the entire form when no row is selected -->
+          <ScrollViewer Padding="16"
+                        IsEnabled="{Binding EditingDevice, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="12">
 
-                <TextBlock Grid.Row="6" Text="Notes" VerticalAlignment="Top" />
-                <TextBox Grid.Row="6" Grid.Column="1"
-                         Text="{Binding Notes, Mode=TwoWay}"
-                         AcceptsReturn="True"
-                         Height="88"
-                         TextWrapping="Wrap" />
+              <TextBlock Text="Device Name *" Foreground="#AAAACC" FontSize="11"/>
+              <TextBox Text="{Binding EditingDevice.DeviceName, Mode=TwoWay}"
+                       Watermark="e.g. Oscilloscope A"/>
 
-                <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                    <Button Content="Add" Command="{Binding AddDeviceCommand}" />
-                    <Button Content="Update" Command="{Binding UpdateDeviceCommand}" />
-                    <Button Content="Delete" Command="{Binding DeleteDeviceCommand}" />
-                    <Button Content="Clear" Command="{Binding ClearFormCommand}" />
-                    <Button Content="Simulate Connect" Command="{Binding SimulateConnectCommand}" />
-                    <Button Content="Simulate Disconnect" Command="{Binding SimulateDisconnectCommand}" />
+              <TextBlock Text="Device Type" Foreground="#AAAACC" FontSize="11"/>
+              <TextBox Text="{Binding EditingDevice.DeviceType, Mode=TwoWay}"
+                       Watermark="e.g. Oscilloscope, DAQ, Sensor"/>
+
+              <TextBlock Text="Firmware Version *" Foreground="#AAAACC" FontSize="11"/>
+              <TextBox Text="{Binding EditingDevice.FirmwareVersion, Mode=TwoWay}"
+                       Watermark="e.g. 2.1.0"/>
+
+              <TextBlock Text="Connection Type" Foreground="#AAAACC" FontSize="11"/>
+              <ComboBox SelectedItem="{Binding EditingDevice.ConnectionType, Mode=TwoWay}"
+                        ItemsSource="{Binding ConnectionTypes}"
+                        HorizontalAlignment="Stretch"/>
+
+              <TextBlock Text="Status" Foreground="#AAAACC" FontSize="11"/>
+              <ComboBox SelectedItem="{Binding EditingDevice.Status, Mode=TwoWay}"
+                        ItemsSource="{Binding StatusValues}"
+                        HorizontalAlignment="Stretch"/>
+
+              <TextBlock Text="Notes" Foreground="#AAAACC" FontSize="11"/>
+              <TextBox Text="{Binding EditingDevice.Notes, Mode=TwoWay}"
+                       Watermark="Optional notes..."
+                       AcceptsReturn="True"
+                       Height="70"
+                       TextWrapping="Wrap"/>
+
+              <!-- Status badge — reads live from the editing wrapper -->
+              <Border Background="#1A1A2E" CornerRadius="6" Padding="10,8" Margin="0,8,0,0">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Selected Device Status" Foreground="#666688" FontSize="10"/>
+                  <TextBlock Text="{Binding EditingDevice.Status}" Foreground="#7C9EFF"
+                             FontSize="15" FontWeight="Bold"/>
                 </StackPanel>
-            </Grid>
-        </Border>
+              </Border>
 
-        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Vertical" Spacing="4">
-            <TextBlock Text="Selected Device Status:" FontWeight="SemiBold" />
-            <TextBlock Text="{Binding SelectedDeviceStatus}" />
-            <TextBlock Text="{Binding ValidationMessage}" Foreground="IndianRed" />
-        </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
     </Grid>
+  </DockPanel>
 </Window>
